@@ -27,10 +27,24 @@ enum layer_number {
   _LOWER,
   _RAISE,
   _ADJUST,
+  _NAV,
+  _GAMING,
 };
 
 #define RAISE MO(_RAISE)
 #define LOWER MO(_LOWER)
+#define NAV_SPC LT(_NAV, KC_SPC)
+#define GAME_TG TG(_GAMING)
+
+enum combo_events {
+  COMBO_GAME_TOGGLE,
+};
+
+const uint16_t PROGMEM game_toggle_combo[] = {KC_LBRC, KC_RBRC, COMBO_END};
+
+combo_t key_combos[] = {
+  [COMBO_GAME_TOGGLE] = COMBO(game_toggle_combo, GAME_TG),
+};
 
 const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 
@@ -54,7 +68,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
   KC_TAB,   KC_Q,   KC_W,    KC_E,    KC_R,    KC_T,                     KC_Y,    KC_U,    KC_I,    KC_O,    KC_P,    KC_MINS,
   KC_LCTL,  KC_A,   KC_S,    KC_D,    KC_F,    KC_G,                     KC_H,    KC_J,    KC_K,    KC_L,    KC_SCLN, KC_QUOT,
   KC_LSFT,  KC_Z,   KC_X,    KC_C,    KC_V,    KC_B, KC_LBRC,  KC_RBRC,  KC_N,    KC_M,    KC_COMM, KC_DOT,  KC_SLSH,  KC_RSFT,
-                      LOWER, KC_LGUI,  KC_LALT, KC_SPC,   KC_ENT,   KC_BSPC,  KC_RGUI, RAISE
+                      LOWER, KC_LGUI,  KC_LALT, NAV_SPC,   KC_ENT,   KC_BSPC,  KC_RGUI, RAISE
 ),
 /* LOWER
  * ,-----------------------------------------.                    ,-----------------------------------------.
@@ -120,6 +134,53 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
     QK_C_EEPROM,  HK_P_SET_D, HK_P_SET_S, HK_P_SET_BUF, XXXXXXX, HK_S_MODE_T,                    KC_UP,   KC_DOWN, XXXXXXX, XXXXXXX, XXXXXXX, QK_C_EEPROM,
     KC_LSFT,      XXXXXXX,    XXXXXXX,    XXXXXXX,      XXXXXXX, HK_D_MODE_T, XXXXXXX,  XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX, XXXXXXX,
                                                    _______, _______, _______, _______,  _______, _______, _______, _______
+  ),
+
+/* NAV (hold Space)
+ * ,-----------------------------------------.                    ,-----------------------------------------.
+ * |      |      |      |      |      |      |                    |      |      |      |      |      |      |
+ * |------+------+------+------+------+------|                    |------+------+------+------+------+------|
+ * |      |      |      |      |      |      |                    | PgUp | Home |  Up  | End  |      |      |
+ * |------+------+------+------+------+------|                    |------+------+------+------+------+------|
+ * |      |      |      |      |      |      |-------.    ,-------| PgDn | Left | Down |Right |      |      |
+ * |------+------+------+------+------+------|       |    |       |------+------+------+------+------+------|
+ * |      |      |      |      |      |      |-------|    |-------|      |      |      |      |      |      |
+ * `-----------------------------------------/       /     \      \-----------------------------------------'
+ *                   |LOWER | LGUI | Alt  | /NAV_SPC/       \Enter \  |BackSP| RGUI |RAISE |
+ *                   |      |      |      |/       /         \      \ |      |      |      |
+ *                   `-------------------''-------'           '------''--------------------'
+ */
+  [_NAV] = LAYOUT(
+    _______, _______, _______, _______, _______, _______,                     _______, _______, _______, _______, _______, _______,
+    _______, _______, _______, _______, _______, _______,                     KC_PGUP, KC_HOME, KC_UP,   KC_END,  _______, _______,
+    _______, _______, _______, _______, _______, _______,                     KC_PGDN, KC_LEFT, KC_DOWN, KC_RGHT, _______, _______,
+    _______, _______, _______, _______, _______, _______, _______,  _______,  _______, _______, _______, _______, _______, _______,
+                                _______, _______, _______, _______,  _______,  _______, _______, _______
+  ),
+
+/* GAMING (toggle: hold both [ and ] together, repeat to exit)
+ * Mostly transparent to QWERTY — WASD, Ctrl, Shift, etc. all stay put.
+ * LOWER/RAISE/NAV are disabled here so the layer-switch keys can't fire
+ * mid-game; the thumb space key reverts to plain Space (e.g. jump).
+ * ,-----------------------------------------.                    ,-----------------------------------------.
+ * |      |      |      |      |      |      |                    |      |      |      |      |      |      |
+ * |------+------+------+------+------+------|                    |------+------+------+------+------+------|
+ * |      |      |      |      |      |      |                    |      |      |      |      |      |      |
+ * |------+------+------+------+------+------|                    |------+------+------+------+------+------|
+ * |      |      |      |      |      |      |-------.    ,-------|      |      |      |      |      |      |
+ * |------+------+------+------+------+------|   [   |    |    ]  |------+------+------+------+------+------|
+ * |      |      |      |      |      |      |-------|    |-------|      |      |      |      |      |      |
+ * `-----------------------------------------/       /     \      \-----------------------------------------'
+ *                   | NO   | LGUI | Alt  | /Space  /       \Enter \  |BackSP| RGUI |  NO  |
+ *                   |      |      |      |/       /         \      \ |      |      |      |
+ *                   `-------------------''-------'           '------''--------------------'
+ */
+  [_GAMING] = LAYOUT(
+    _______, _______, _______, _______, _______, _______,                     _______, _______, _______, _______, _______, _______,
+    _______, _______, _______, _______, _______, _______,                     _______, _______, _______, _______, _______, _______,
+    _______, _______, _______, _______, _______, _______,                     _______, _______, _______, _______, _______, _______,
+    _______, _______, _______, _______, _______, _______, _______,  _______,  _______, _______, _______, _______, _______, _______,
+                                KC_NO,   _______, _______, KC_SPC,   _______,  _______, _______, KC_NO
   )
 };
 
@@ -128,13 +189,17 @@ layer_state_t layer_state_set_user(layer_state_t state) {
   return state;
 }
 
-#if defined(OLED_ENABLE) && !defined(HK_OLED_ENABLE)
-
+#ifdef OLED_ENABLE
+// Both halves' OLEDs are mounted in portrait. This applies regardless of which
+// renderer is active (users/holykeebs/oled.c's oled_task_user, gated by
+// HK_OLED_ENABLE, or the fallback one further down) — rotation is a separate
+// hook from the rendering itself.
 oled_rotation_t oled_init_user(oled_rotation_t rotation) {
-  if (!is_keyboard_master())
-    return OLED_ROTATION_180;  // flips the display 180 degrees if offhand
-  return rotation;
+  return OLED_ROTATION_270;
 }
+#endif
+
+#if defined(OLED_ENABLE) && !defined(HK_OLED_ENABLE)
 
 static void render_logo(void) {
     static const char PROGMEM logo[] = {
@@ -211,6 +276,12 @@ bool oled_task_user(void) {
         break;
     case _ADJUST:
         oled_write_ln_P(PSTR("Adjust"), false);
+        break;
+    case _NAV:
+        oled_write_ln_P(PSTR("Nav"), false);
+        break;
+    case _GAMING:
+        oled_write_ln_P(PSTR("Gaming"), false);
         break;
     default:
         oled_write_ln_P(PSTR("Undefined"), false);

@@ -82,6 +82,12 @@
 // Event mode can't be used until the pointing code has changed (stuck buttons)
 #    define AZOTEQ_IQS5XX_EVENT_MODE false
 #endif
+#ifndef AZOTEQ_IQS5XX_INIT_RETRIES
+#    define AZOTEQ_IQS5XX_INIT_RETRIES 5
+#endif
+#ifndef AZOTEQ_IQS5XX_INIT_RETRY_DELAY_MS
+#    define AZOTEQ_IQS5XX_INIT_RETRY_DELAY_MS 50
+#endif
 
 #if defined(AZOTEQ_IQS5XX_TPS43)
 #    define AZOTEQ_IQS5XX_WIDTH_MM 43
@@ -228,16 +234,15 @@ i2c_status_t azoteq_iqs5xx_set_xy_config(bool flip_x, bool flip_y, bool switch_x
     azoteq_iqs5xx_xy_config_0_t config = {0};
     i2c_status_t                status = i2c_read_register16(AZOTEQ_IQS5XX_ADDRESS, AZOTEQ_IQS5XX_REG_XY_CONFIG_0, (uint8_t *)&config, sizeof(azoteq_iqs5xx_xy_config_0_t), AZOTEQ_IQS5XX_TIMEOUT_MS);
     if (status == I2C_STATUS_SUCCESS) {
-        if (flip_x) {
-            config.flip_x = !config.flip_x;
-        }
-        if (flip_y) {
-            config.flip_y = !config.flip_y;
-        }
-        if (switch_xy) {
-            config.switch_xy_axis = !config.switch_xy_axis;
-        }
-        config.palm_reject = palm_reject;
+        // Write absolute values rather than toggling from whatever the chip currently reports.
+        // Toggling is only correct if the chip's flip bits start from a known state every time
+        // this runs, which isn't true: SYSTEM_CONTROL_1's reset bit doesn't reload XY_CONFIG_0,
+        // so repeated calls (e.g. from re-inits triggered by split watchdog resets) flip the
+        // bits back and forth instead of leaving them in the desired state.
+        config.flip_x         = flip_x;
+        config.flip_y         = flip_y;
+        config.switch_xy_axis = switch_xy;
+        config.palm_reject    = palm_reject;
         status             = i2c_write_register16(AZOTEQ_IQS5XX_ADDRESS, AZOTEQ_IQS5XX_REG_XY_CONFIG_0, (uint8_t *)&config, sizeof(azoteq_iqs5xx_xy_config_0_t), AZOTEQ_IQS5XX_TIMEOUT_MS);
     }
     if (end_session) {
@@ -326,8 +331,24 @@ void azoteq_iqs5xx_init(void) {
     i2c_ping_address(AZOTEQ_IQS5XX_ADDRESS, 1); // wake
     azoteq_iqs5xx_reset_suspend(true, false, true);
     wait_ms(100);
-    i2c_ping_address(AZOTEQ_IQS5XX_ADDRESS, 1); // wake
-    if (azoteq_iqs5xx_get_product() != AZOTEQ_IQS5XX_UNKNOWN) {
+
+    // The chip may not have finished settling yet, especially if this init is running because
+    // of an unrelated MCU reset (e.g. split watchdog) rather than a fresh power-on. Retry the
+    // product check instead of giving up after a single attempt - without this, a single missed
+    // check here permanently disables the trackpad for the rest of the session (get_report bails
+    // out immediately whenever azoteq_iqs5xx_init_status != I2C_STATUS_SUCCESS).
+    uint8_t  attempts_remaining = AZOTEQ_IQS5XX_INIT_RETRIES;
+    uint16_t product_number;
+    do {
+        i2c_ping_address(AZOTEQ_IQS5XX_ADDRESS, 1); // wake
+        product_number = azoteq_iqs5xx_get_product();
+        if (product_number != AZOTEQ_IQS5XX_UNKNOWN) {
+            break;
+        }
+        wait_ms(AZOTEQ_IQS5XX_INIT_RETRY_DELAY_MS);
+    } while (--attempts_remaining);
+
+    if (product_number != AZOTEQ_IQS5XX_UNKNOWN) {
         azoteq_iqs5xx_setup_resolution();
         azoteq_iqs5xx_init_status = azoteq_iqs5xx_set_report_rate(AZOTEQ_IQS5XX_REPORT_RATE, AZOTEQ_IQS5XX_ACTIVE, false);
         azoteq_iqs5xx_init_status |= azoteq_iqs5xx_set_report_rate(AZOTEQ_IQS5XX_REPORT_RATE, AZOTEQ_IQS5XX_IDLE, false);
@@ -341,6 +362,11 @@ void azoteq_iqs5xx_init(void) {
         azoteq_iqs5xx_init_status |= azoteq_iqs5xx_set_xy_config(false, true, true, true, false);
 #elif defined(AZOTEQ_IQS5XX_ROTATION_180)
         azoteq_iqs5xx_init_status |= azoteq_iqs5xx_set_xy_config(true, true, false, true, false);
+#elif defined(AZOTEQ_IQS5XX_ROTATION_180_MIRRORED)
+        // Same 180 flip as AZOTEQ_IQS5XX_ROTATION_180, plus an axis swap. Needed when the sensor
+        // is mounted such that its native X/Y axes are transposed relative to the other rotation
+        // presets (none of the plain 90/180/270 rotations cover this case).
+        azoteq_iqs5xx_init_status |= azoteq_iqs5xx_set_xy_config(true, true, true, true, false);
 #elif defined(AZOTEQ_IQS5XX_ROTATION_270)
         azoteq_iqs5xx_init_status |= azoteq_iqs5xx_set_xy_config(true, false, true, true, false);
 #else
